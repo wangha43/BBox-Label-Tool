@@ -26,7 +26,7 @@ class LabelTool():
         self.parent.title("LabelTool")
         self.frame = Frame(self.parent)
         self.frame.pack(fill=BOTH, expand=1)
-        self.parent.resizable(width = FALSE, height = FALSE)
+        self.parent.resizable(width = True, height = True)
 
         # initialize global state
         self.imageDir = ''
@@ -75,8 +75,10 @@ class LabelTool():
         # showing bbox info & delete bbox
         self.lb1 = Label(self.frame, text = 'Bounding boxes:')
         self.lb1.grid(row = 1, column = 2,  sticky = W+N)
+
         self.listbox = Listbox(self.frame, width = 22, height = 12)
         self.listbox.grid(row = 2, column = 2, sticky = N)
+
         self.btnDel = Button(self.frame, text = 'Delete', command = self.delBBox)
         self.btnDel.grid(row = 3, column = 2, sticky = W+E+N)
         self.btnClear = Button(self.frame, text = 'ClearAll', command = self.clearBBox)
@@ -103,6 +105,7 @@ class LabelTool():
         self.egPanel.grid(row = 1, column = 0, rowspan = 5, sticky = N)
         self.tmpLabel2 = Label(self.egPanel, text = "Examples:")
         self.tmpLabel2.pack(side = TOP, pady = 5)
+
         self.egLabels = []
         for i in range(3):
             self.egLabels.append(Label(self.egPanel))
@@ -130,10 +133,10 @@ class LabelTool():
 ##            tkMessageBox.showerror("Error!", message = "The specified dir doesn't exist!")
 ##            return
         # get image list
-        self.imageDir = os.path.join(r'./Images', '%03d' %(self.category))
-        self.imageList = glob.glob(os.path.join(self.imageDir, '*.JPEG'))
+        self.imageDir = os.path.join(r'./Images', '%3d' %(self.category))
+        self.imageList = glob.glob(os.path.join(self.imageDir, '*.jpg'))
         if len(self.imageList) == 0:
-            print 'No .JPEG images found in the specified dir!'
+            print 'No .jpg images found in the specified dir!'
             return
 
         # default to the 1st image in the collection
@@ -184,24 +187,27 @@ class LabelTool():
         if os.path.exists(self.labelfilename):
             with open(self.labelfilename) as f:
                 for (i, line) in enumerate(f):
-                    if i == 0:
-                        bbox_cnt = int(line.strip())
-                        continue
-                    tmp = [int(t.strip()) for t in line.split()]
-##                    print tmp
-                    self.bboxList.append(tuple(tmp))
-                    tmpId = self.mainPanel.create_rectangle(tmp[0], tmp[1], \
-                                                            tmp[2], tmp[3], \
+                    # if i == 0:
+                    #     bbox_cnt = int(line.strip())
+                    #     continue
+                    tmp = [t.strip() for t in line.split()]
+                    
+                    
+                    tmpId = self.mainPanel.create_rectangle(int(float(tmp[1])*self.tkimg.width()), int(float(tmp[2])*self.tkimg.height()), \
+                                                            int(float(tmp[3])*self.tkimg.width()), int(float(tmp[4])*self.tkimg.height()), \
                                                             width = 2, \
                                                             outline = COLORS[(len(self.bboxList)-1) % len(COLORS)])
                     self.bboxIdList.append(tmpId)
-                    self.listbox.insert(END, '(%d, %d) -> (%d, %d)' %(tmp[0], tmp[1], tmp[2], tmp[3]))
+                    self.listbox.insert(END, '(%4f, %4f) -> (%4f, %4f)' %(float(tmp[1]), float(tmp[2]), float(tmp[3]), float(tmp[4])))
+                    del tmp[0]
+                    self.bboxList.append(tuple(tmp))
                     self.listbox.itemconfig(len(self.bboxIdList) - 1, fg = COLORS[(len(self.bboxIdList) - 1) % len(COLORS)])
 
     def saveImage(self):
         with open(self.labelfilename, 'w') as f:
-            f.write('%d\n' %len(self.bboxList))
             for bbox in self.bboxList:
+                f.write('%d ' %(self.category))
+                print ' '.join(map(str, bbox))
                 f.write(' '.join(map(str, bbox)) + '\n')
         print 'Image No. %d saved' %(self.cur)
 
@@ -212,10 +218,17 @@ class LabelTool():
         else:
             x1, x2 = min(self.STATE['x'], event.x), max(self.STATE['x'], event.x)
             y1, y2 = min(self.STATE['y'], event.y), max(self.STATE['y'], event.y)
-            self.bboxList.append((x1, y1, x2, y2))
+
+            xf1 = round(x1/self.tkimg.width(),6)
+            xf2 = round(x2/self.tkimg.width(),6)
+            yf1 = round(y1/self.tkimg.height(),6)
+            yf2 = round(y2/self.tkimg.height(),6)
+            print xf1,xf2,yf1,yf2
+            self.bboxList.append((xf1,yf1,xf2,yf2))
             self.bboxIdList.append(self.bboxId)
             self.bboxId = None
-            self.listbox.insert(END, '(%d, %d) -> (%d, %d)' %(x1, y1, x2, y2))
+#-----------------------what is the width and height--------------------------
+            self.listbox.insert(END, '(%f, %f) -> (%f, %f)' %(xf1,xf2,yf1,yf2))
             self.listbox.itemconfig(len(self.bboxIdList) - 1, fg = COLORS[(len(self.bboxIdList) - 1) % len(COLORS)])
         self.STATE['click'] = 1 - self.STATE['click']
 
@@ -285,6 +298,19 @@ class LabelTool():
 ##        self.mainPanel.config(width = self.tkimg.width())
 ##        self.mainPanel.config(height = self.tkimg.height())
 ##        self.mainPanel.create_image(0, 0, image = self.tkimg, anchor=NW)
+    def imgresize(w, h, w_box, h_box, pil_image):  
+        ''''' 
+        resize a pil_image object so it will fit into 
+        a box of size w_box times h_box, but retain aspect ratio 
+        '''  
+        f1 = 1.0*w_box/w # 1.0 forces float division in Python2  
+        f2 = 1.0*h_box/h  
+        factor = min([f1, f2])  
+        #print(f1, f2, factor) # test  
+        # use best down-sizing filter  
+        width = int(w*factor)  
+        height = int(h*factor)  
+        return pil_image.resize((width, height), Image.ANTIALIAS)  
 
 if __name__ == '__main__':
     root = Tk()
